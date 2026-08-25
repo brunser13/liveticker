@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Liveticker – Die Dritte</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root{
+    --navy: #10253f;
+    --navy-deep: #0a1a2c;
+    --claret: #611a24;
+    --claret-deep: #451319;
+    --amber: #e2ac3f;
+    --cream: #f4eee2;
+    --cream-dim: #e7ddc9;
+    --ink: #241d15;
+    --green: #33462f;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    margin:0;
+    background: var(--cream);
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(36,29,21,0.06) 1px, transparent 0);
+    background-size: 14px 14px;
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    display:flex;
+    justify-content:center;
+    padding: 28px 14px 60px;
+  }
+
+  .sheet{
+    width:100%;
+    max-width: 480px;
+  }
+
+  /* Masthead */
+  .masthead{
+    background: var(--navy);
+    background-image: linear-gradient(160deg, var(--navy) 0%, var(--navy-deep) 100%);
+    border-radius: 14px 14px 0 0;
+    padding: 18px 20px 16px;
+    color: var(--cream);
+    position: relative;
+    overflow:hidden;
+    border: 1px solid var(--navy-deep);
+  }
+  .masthead::after{
+    content:"";
+    position:absolute; inset:0;
+    background: repeating-linear-gradient(115deg, transparent 0 26px, var(--claret) 26px 30px);
+    opacity: 0.12;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--amber);
+    display:flex; align-items:center; gap:7px;
+    position:relative; z-index:1;
+  }
+  .dot{
+    width:7px; height:7px; border-radius:50%;
+    background: var(--amber);
+    box-shadow: 0 0 0 0 rgba(226,172,63,0.6);
+    animation: pulse 1.8s infinite;
+  }
+  .dot.off{ background:#8a8a8a; animation:none; box-shadow:none; }
+  @keyframes pulse{
+    0%{ box-shadow: 0 0 0 0 rgba(226,172,63,0.55); }
+    70%{ box-shadow: 0 0 0 8px rgba(226,172,63,0); }
+    100%{ box-shadow: 0 0 0 0 rgba(226,172,63,0); }
+  }
+  .matchup{
+    font-family:'Bebas Neue', sans-serif;
+    font-size: 34px;
+    letter-spacing: 0.01em;
+    line-height:1.05;
+    margin-top:8px;
+    position:relative; z-index:1;
+  }
+  .matchup .vs{ color: var(--amber); font-size: 0.6em; margin:0 6px; }
+  .score-row{
+    display:flex; align-items:baseline; gap:14px;
+    margin-top: 10px; position:relative; z-index:1;
+  }
+  .score{
+    font-family:'Bebas Neue', sans-serif;
+    font-size: 46px;
+    letter-spacing: 0.02em;
+    color: var(--cream);
+  }
+  .minute{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 13px;
+    background: rgba(244,238,226,0.12);
+    border: 1px solid rgba(244,238,226,0.25);
+    padding: 4px 9px;
+    border-radius: 20px;
+    color: var(--amber);
+  }
+  .meta{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: rgba(244,238,226,0.6);
+    margin-top: 10px;
+    position:relative; z-index:1;
+  }
+
+  /* Feed */
+  .feed-wrap{
+    background: var(--cream);
+    border: 1px solid var(--cream-dim);
+    border-top: none;
+    border-radius: 0 0 14px 14px;
+    padding: 6px 0 4px;
+  }
+  .feed{
+    list-style:none; margin:0; padding: 10px 16px 6px;
+    display:flex; flex-direction:column; gap:0;
+  }
+  .entry{
+    display:grid;
+    grid-template-columns: 48px 1fr;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px dashed var(--cream-dim);
+  }
+  .entry:last-child{ border-bottom:none; }
+  .entry .tmark{
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size: 13px;
+    color: var(--claret);
+    background: rgba(97,26,36,0.08);
+    border-radius: 7px;
+    height: 30px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .entry.goal .tmark{ background: var(--amber); color: var(--navy-deep); }
+  .entry.new{ animation: land 0.5s ease; }
+  @keyframes land{
+    from{ opacity:0; transform: translateY(-6px); }
+    to{ opacity:1; transform: translateY(0); }
+  }
+  .entry p{ margin:0; font-size: 14.5px; line-height:1.5; }
+  .entry .tag{
+    display:inline-block;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color: var(--green);
+    margin-bottom: 3px;
+  }
+  .entry.goal .tag{ color: var(--claret); font-weight:600; }
+
+  .empty{
+    padding: 30px 20px 34px;
+    text-align:center;
+    color: #8a8072;
+    font-size: 13.5px;
+  }
+
+  /* Reporter panel */
+  .panel{
+    margin-top: 16px;
+    background: #fff;
+    border: 1px solid var(--cream-dim);
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .panel h2{
+    font-family:'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 0.02em;
+    margin: 0 0 10px;
+    color: var(--navy);
+  }
+  .row{ display:flex; gap:8px; margin-bottom:9px; }
+  input[type=text], input[type=number], input[type=date], input[type=time], input[type=password], select, textarea{
+    font-family:'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    border: 1px solid #d8cfbc;
+    border-radius: 8px;
+    padding: 9px 10px;
+    background: var(--cream);
+    color: var(--ink);
+    width:100%;
+  }
+  textarea{ resize:vertical; min-height:54px; }
+  .row .min-input{ width: 78px; flex: none; }
+  select{ flex:none; width: 130px; }
+  button{
+    font-family:'IBM Plex Sans', sans-serif;
+    font-weight:600;
+    font-size: 14px;
+    border:none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    cursor:pointer;
+    background: var(--claret);
+    color: var(--cream);
+    width:100%;
+  }
+  button:hover{ background: var(--claret-deep); }
+  button:disabled{ opacity:0.5; cursor:default; }
+
+  .lock{
+    text-align:center; padding: 10px 4px 2px;
+  }
+  .lock p{ font-size: 12.5px; color:#8a8072; margin: 0 0 8px; }
+  .lock-row{ display:flex; gap:8px; }
+  .lock-row input{ text-align:center; letter-spacing: 0.2em; }
+  .lock-row button{ width: 110px; flex:none; background: var(--navy); }
+  .lock-row button:hover{ background: var(--navy-deep); }
+
+  .unlocked-tag{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom: 12px;
+  }
+  .unlocked-tag span{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--green);
+  }
+  .unlocked-tag button{
+    width:auto; background:transparent; color:#8a8072; padding: 4px 8px;
+    font-weight:400; font-size:12px;
+    border: 1px solid var(--cream-dim);
+  }
+  .unlocked-tag button:hover{ background: var(--cream); color: var(--ink); }
+
+  .score-edit{ display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+  .score-edit input{ width: 54px; text-align:center; }
+  .score-edit span{ font-family:'Bebas Neue',sans-serif; font-size:18px; color:var(--navy); }
+
+  .share-hint{
+    text-align:center; margin-top:16px; font-size:12px; color:#8a8072;
+  }
+
+  /* Tabs */
+  .tabs{
+    display:flex; gap:6px; margin-bottom: 12px;
+  }
+  .tab{
+    flex:1;
+    text-align:center;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    padding: 9px 6px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid var(--cream-dim);
+    color: #8a8072;
+    cursor:pointer;
+  }
+  .tab.active{
+    background: var(--navy);
+    border-color: var(--navy);
+    color: var(--cream);
+  }
+
+  /* Archive */
+  .archive-list{ display:flex; flex-direction:column; gap:8px; }
+  .archive-item{
+    display:flex; justify-content:space-between; align-items:center;
+    background:#fff; border:1px solid var(--cream-dim); border-radius:10px;
+    padding: 11px 13px; cursor:pointer;
+  }
+  .archive-item:hover{ border-color: var(--claret); }
+  .archive-item .aname{ font-size:14px; font-weight:600; }
+  .archive-item .adate{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:#8a8072; margin-top:2px; }
+  .archive-item .ascore{
+    font-family:'Bebas Neue', sans-serif; font-size:20px; color:var(--claret);
+  }
+  .archive-empty{
+    text-align:center; color:#8a8072; font-size:13.5px; padding: 24px 10px;
+  }
+  .back-link{
+    display:inline-block; margin-bottom:12px; font-size:13px; color:var(--navy);
+    cursor:pointer; text-decoration:underline;
+  }
+  .archive-toolbar{
+    display:flex; justify-content:flex-end; margin-bottom:10px;
+  }
+  .archive-toolbar button{
+    width:auto; background: var(--navy); padding: 8px 12px; font-size:13px;
+  }
+  .archive-toolbar button:hover{ background: var(--navy-deep); }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+  <div class="tabs">
+    <div class="tab active" id="tabLive">Live</div>
+    <div class="tab" id="tabArchive">Archiv</div>
+  </div>
+
+  <div id="liveView">
+
+    <div class="masthead">
+      <div class="eyebrow"><span class="dot off" id="liveDot"></span><span id="statusText">Nächstes Spiel</span></div>
+      <div class="matchup" id="matchupText">SG Olympia III <span class="vs">–</span> Gegner</div>
+      <div class="score-row">
+        <div class="score" id="scoreText">0 : 0</div>
+        <div class="minute" id="minuteText">0'</div>
+      </div>
+      <div class="meta" id="metaText">Kreisliga · Heimspiel</div>
+    </div>
+
+    <div class="feed-wrap">
+      <ul class="feed" id="feed"></ul>
+      <div class="empty" id="emptyState">Der Ticker startet, sobald der erste Eintrag kommt.</div>
+    </div>
+
+    <div class="panel" id="reporterPanel">
+      <div class="lock" id="lockView">
+        <p>Nur fürs Team: Passwort eingeben, um Einträge zu posten.</p>
+        <div class="lock-row">
+          <input type="password" id="pinInput" placeholder="Passwort" autocomplete="current-password">
+          <button id="unlockBtn">Freischalten</button>
+        </div>
+      </div>
+
+      <div id="editView" style="display:none;">
+        <div class="unlocked-tag">
+          <span>Reporter-Modus aktiv</span>
+          <button id="lockBtn">Sperren</button>
+        </div>
+
+        <h2>Spieldetails</h2>
+        <div class="row">
+          <input type="text" id="opponentDetailInput" placeholder="Gegner">
+          <select id="venueSelect" style="width:130px;">
+            <option value="home">Heimspiel</option>
+            <option value="away">Auswärts</option>
+          </select>
+        </div>
+        <div class="row">
+          <input type="date" id="matchDateInput">
+          <input type="time" id="kickoffInput">
+        </div>
+        <button id="updateDetailsBtn" style="background:var(--navy); margin-bottom:16px;">Übernehmen</button>
+
+        <h2>Spielstand <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8a8072; text-transform:none; letter-spacing:0;">(eigene Tore : Gegner-Tore)</span></h2>
+        <div class="score-edit">
+          <input type="number" id="homeScore" min="0" value="0">
+          <span>:</span>
+          <input type="number" id="awayScore" min="0" value="0">
+          <input type="text" id="minuteInput" placeholder="Minute" style="width:70px;">
+          <button id="updateScoreBtn" style="width:auto; padding:9px 12px;">Setzen</button>
+        </div>
+
+        <h2>Neuer Eintrag</h2>
+        <div class="row">
+          <input type="text" class="min-input" id="entryMinute" placeholder="Min.">
+          <select id="entryType">
+            <option value="event">Ereignis</option>
+            <option value="goal">Tor</option>
+            <option value="card">Karte</option>
+            <option value="sub">Wechsel</option>
+            <option value="update">Update</option>
+          </select>
+        </div>
+        <div class="row">
+          <textarea id="entryText" placeholder="Was ist passiert?"></textarea>
+        </div>
+        <button id="postBtn">Posten</button>
+
+        <h2 style="margin-top:18px;">Spiel abschließen</h2>
+        <div class="row">
+          <input type="text" id="opponentInput" placeholder="Gegner fürs nächste Spiel">
+          <select id="nextVenueSelect" style="width:130px;">
+            <option value="home">Heimspiel</option>
+            <option value="away">Auswärts</option>
+          </select>
+        </div>
+        <div class="row">
+          <input type="date" id="nextMatchDateInput">
+          <input type="time" id="nextKickoffInput">
+        </div>
+        <button id="archiveBtn" style="background:var(--navy);">Spiel archivieren &amp; neuen Ticker starten</button>
+        <p id="archiveStatus" style="font-size:12.5px; color:var(--green); margin:8px 0 0; text-align:center;"></p>
+      </div>
+    </div>
+
+    <p class="share-hint">Diesen Link während des Spiels teilen – aktualisiert sich automatisch.</p>
+  </div>
+
+  <div id="archiveView" style="display:none;">
+    <div class="back-link" id="archiveDetailBack" style="display:none;">← Zurück zur Übersicht</div>
+
+    <div id="archiveListWrap">
+      <div class="archive-list" id="archiveList"></div>
+      <div class="archive-empty" id="archiveEmpty" style="display:none;">Noch keine archivierten Spiele.</div>
+    </div>
+
+    <div id="archiveDetailWrap" style="display:none;">
+      <div class="masthead">
+        <div class="eyebrow"><span class="dot off"></span><span>Beendet</span></div>
+        <div class="matchup" id="archMatchupText">SG Olympia III <span class="vs">–</span> Gegner</div>
+        <div class="score-row">
+          <div class="score" id="archScoreText">0 : 0</div>
+        </div>
+        <div class="meta" id="archMetaText">Kreisliga</div>
+      </div>
+      <div class="feed-wrap">
+        <ul class="feed" id="archFeed"></ul>
+      </div>
+      <div id="archiveDeleteZone" style="display:none; margin-top:12px;">
+        <button id="deleteArchiveBtn" style="background:var(--claret-deep);">Dieses Spiel löschen</button>
+        <p id="deleteArchiveStatus" style="font-size:12.5px; color:#8a8072; margin:8px 0 0; text-align:center;"></p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ===== FIREBASE KONFIGURATION =====
+// Diese Werte bekommst du aus deiner Firebase-Konsole (Projekteinstellungen -> Web-App).
+// Siehe Einrichtungsanleitung für die genauen Schritte.
+const firebaseConfig = {
+  apiKey: "AIzaSyAsfLaa91LogxFI_ahNywXvDJ5o9H8Lohs",
+  authDomain: "sg-olympia-3-liveticker.firebaseapp.com",
+  projectId: "sg-olympia-3-liveticker",
+  storageBucket: "sg-olympia-3-liveticker.firebasestorage.app",
+  messagingSenderId: "282379730913",
+  appId: "1:282379730913:web:92ff80fc576946a28b5ca0"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const matchRef = db.collection('ticker').doc('match');
+const eventsRef = db.collection('ticker').doc('events');
+const archiveListRef = db.collection('archive').doc('list');
+function archiveDocRef(id){ return db.collection('archive').doc(id); }
+// ===================================
+
+const auth = firebase.auth();
+// E-Mail-Kennung des gemeinsamen Reporter-Kontos (kein Geheimnis, nur eine ID).
+// Wird zusammen mit einem Passwort in der Firebase-Konsole angelegt (siehe Anleitung).
+const REPORTER_EMAIL = "ticker@sgo.de";
+let isReporter = false;
+let lastEventCount = 0;
+let pollTimer = null;
+
+async function loadMatch(){
+  try{
+    const snap = await matchRef.get();
+    return snap.exists ? snap.data() : defaultMatch();
+  }catch(e){ return defaultMatch(); }
+}
+function defaultMatch(){
+  return { opponent:"Gegner", venue:"home", matchDate:"", kickoff:"", home:0, away:0, minute:"0", status:"Live", meta: buildMeta("home", "", "") };
+}
+function buildMeta(venue, matchDate, kickoff){
+  let parts = [ venue === "away" ? "Kreisliga · Auswärtsspiel" : "Kreisliga · Heimspiel" ];
+  if(matchDate){
+    const d = new Date(matchDate + "T00:00:00");
+    if(!isNaN(d)){
+      const weekday = d.toLocaleDateString('de-DE', { weekday: 'short' });
+      const dateStr = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+      parts.push(`${weekday}., ${dateStr}`);
+    }
+  }
+  if(kickoff){
+    parts.push(`${kickoff} Uhr`);
+  }
+  return parts.join(" · ");
+}
+async function saveMatch(m){
+  await matchRef.set(m);
+}
+
+async function loadEvents(){
+  try{
+    const snap = await eventsRef.get();
+    return snap.exists ? (snap.data().list || []) : [];
+  }catch(e){ return []; }
+}
+async function saveEvents(list){
+  await eventsRef.set({ list });
+}
+
+function renderMatch(m, eventCount){
+  const own = "SG Olympia III";
+  const opp = escapeHtml(m.opponent);
+  const matchupHtml = m.venue === "away"
+    ? `${opp} <span class="vs">–</span> ${own}`
+    : `${own} <span class="vs">–</span> ${opp}`;
+  document.getElementById('matchupText').innerHTML = matchupHtml;
+  const scoreDisplay = m.venue === "away" ? `${m.away} : ${m.home}` : `${m.home} : ${m.away}`;
+  document.getElementById('scoreText').textContent = scoreDisplay;
+  document.getElementById('minuteText').textContent = `${m.minute}'`;
+  document.getElementById('metaText').textContent = m.meta || "";
+
+  const isFinished = (m.status || "").toLowerCase().includes('beendet');
+  const isLive = eventCount > 0 && !isFinished;
+  const dot = document.getElementById('liveDot');
+  if(isFinished){
+    document.getElementById('statusText').textContent = m.status;
+    dot.classList.add('off');
+  } else if(isLive){
+    document.getElementById('statusText').textContent = "Live";
+    dot.classList.remove('off');
+  } else {
+    document.getElementById('statusText').textContent = "Nächstes Spiel";
+    dot.classList.add('off');
+  }
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.innerText = s;
+  return d.innerHTML;
+}
+
+function typeLabel(t){
+  return { goal:"Tor", card:"Karte", sub:"Wechsel", event:"Ereignis", update:"" }[t] || "Ereignis";
+}
+
+function renderEvents(list, animateNew){
+  const feed = document.getElementById('feed');
+  const empty = document.getElementById('emptyState');
+  if(!list.length){
+    feed.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+  const sorted = [...list].sort((a,b) => b.ts - a.ts);
+  feed.innerHTML = sorted.map((e, i) => `
+    <li class="entry ${e.type === 'goal' ? 'goal' : ''} ${animateNew && i === 0 ? 'new' : ''}">
+      <div class="tmark">${escapeHtml(e.minute)}'</div>
+      <div>
+        ${typeLabel(e.type) ? `<span class="tag">${typeLabel(e.type)}</span>` : ''}
+        <p>${escapeHtml(e.text)}</p>
+      </div>
+    </li>
+  `).join("");
+}
+
+async function refresh(animateIfChanged){
+  const [m, events] = await Promise.all([loadMatch(), loadEvents()]);
+  renderMatch(m, events.length);
+  const changed = events.length !== lastEventCount;
+  renderEvents(events, animateIfChanged && changed);
+  lastEventCount = events.length;
+}
+
+// Reporter unlock via echtem Firebase-Login (Passwort steht nirgends im Code)
+document.getElementById('unlockBtn').addEventListener('click', async () => {
+  const pass = document.getElementById('pinInput').value;
+  const btn = document.getElementById('unlockBtn');
+  if(!pass) return;
+  btn.disabled = true; btn.textContent = "Prüfe…";
+  try{
+    await auth.signInWithEmailAndPassword(REPORTER_EMAIL, pass);
+    // Erfolg wird über onAuthStateChanged unten behandelt
+  }catch(err){
+    document.getElementById('pinInput').value = "";
+    document.getElementById('pinInput').placeholder = "Falsch – nochmal";
+  } finally {
+    btn.disabled = false; btn.textContent = "Freischalten";
+  }
+});
+document.getElementById('lockBtn').addEventListener('click', async () => {
+  await auth.signOut();
+});
+
+// Auth-Status zentral steuern (reagiert auch nach Seiten-Reload, falls Login noch gültig ist)
+auth.onAuthStateChanged((user) => {
+  isReporter = !!user;
+  document.getElementById('lockView').style.display = isReporter ? "none" : "block";
+  document.getElementById('editView').style.display = isReporter ? "block" : "none";
+  document.getElementById('pinInput').value = "";
+});
+
+// Post entry
+document.getElementById('postBtn').addEventListener('click', async () => {
+  const minute = document.getElementById('entryMinute').value.trim() || "?";
+  const type = document.getElementById('entryType').value;
+  const text = document.getElementById('entryText').value.trim();
+  if(!text) return;
+  const btn = document.getElementById('postBtn');
+  btn.disabled = true; btn.textContent = "Posten…";
+  try{
+    const events = await loadEvents();
+    events.push({ minute, type, text, ts: Date.now() });
+    await saveEvents(events);
+    document.getElementById('entryText').value = "";
+    document.getElementById('entryMinute').value = "";
+    await refresh(true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Posten";
+  }
+});
+
+// Update score/minute/opponent quickly
+document.getElementById('updateScoreBtn').addEventListener('click', async () => {
+  const m = await loadMatch();
+  m.home = parseInt(document.getElementById('homeScore').value) || 0;
+  m.away = parseInt(document.getElementById('awayScore').value) || 0;
+  const min = document.getElementById('minuteInput').value.trim();
+  if(min) m.minute = min;
+  await saveMatch(m);
+  await refresh(false);
+});
+
+// Update match details: opponent name + home/away + date + kickoff
+document.getElementById('updateDetailsBtn').addEventListener('click', async () => {
+  const m = await loadMatch();
+  const opponent = document.getElementById('opponentDetailInput').value.trim();
+  if(opponent) m.opponent = opponent;
+  m.venue = document.getElementById('venueSelect').value;
+  m.matchDate = document.getElementById('matchDateInput').value;
+  m.kickoff = document.getElementById('kickoffInput').value;
+  m.meta = buildMeta(m.venue, m.matchDate, m.kickoff);
+  await saveMatch(m);
+  await refresh(false);
+});
+
+// Archive current match, start a fresh one (two-step inline confirm, no browser dialogs)
+let archiveArmed = false;
+let archiveArmTimer = null;
+
+document.getElementById('archiveBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('archiveBtn');
+  const status = document.getElementById('archiveStatus');
+
+  if(!archiveArmed){
+    archiveArmed = true;
+    btn.textContent = "Sicher? Nochmal klicken zum Archivieren";
+    status.textContent = "";
+    clearTimeout(archiveArmTimer);
+    archiveArmTimer = setTimeout(() => {
+      archiveArmed = false;
+      btn.textContent = "Spiel archivieren & neuen Ticker starten";
+    }, 4000);
+    return;
+  }
+
+  clearTimeout(archiveArmTimer);
+  archiveArmed = false;
+  btn.disabled = true; btn.textContent = "Archiviere…";
+  status.textContent = "";
+
+  try{
+    const [m, events] = await Promise.all([loadMatch(), loadEvents()]);
+    const id = "match_" + Date.now();
+    const dateLabel = new Date().toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+
+    await archiveDocRef(id).set({ match: m, events, dateLabel });
+
+    let list = [];
+    try{
+      const snap = await archiveListRef.get();
+      list = snap.exists ? (snap.data().items || []) : [];
+    }catch(e){}
+    list.unshift({ id, opponent: m.opponent, venue: m.venue || "home", home: m.home, away: m.away, dateLabel });
+    await archiveListRef.set({ items: list });
+
+    const nextOpponent = document.getElementById('opponentInput').value.trim() || "Gegner";
+    const nextVenue = document.getElementById('nextVenueSelect').value;
+    const nextMatchDate = document.getElementById('nextMatchDateInput').value;
+    const nextKickoff = document.getElementById('nextKickoffInput').value;
+    await saveMatch({
+      opponent: nextOpponent, venue: nextVenue, matchDate: nextMatchDate, kickoff: nextKickoff,
+      home:0, away:0, minute:"0", status:"Live", meta: buildMeta(nextVenue, nextMatchDate, nextKickoff)
+    });
+    await saveEvents([]);
+
+    document.getElementById('opponentInput').value = "";
+    document.getElementById('nextMatchDateInput').value = "";
+    document.getElementById('nextKickoffInput').value = "";
+    document.getElementById('opponentDetailInput').value = nextOpponent;
+    document.getElementById('venueSelect').value = nextVenue;
+    document.getElementById('matchDateInput').value = nextMatchDate;
+    document.getElementById('kickoffInput').value = nextKickoff;
+    document.getElementById('homeScore').value = 0;
+    document.getElementById('awayScore').value = 0;
+    lastEventCount = 0;
+    await refresh(false);
+    status.textContent = "✓ Archiviert. Neuer Ticker ist bereit.";
+  } catch(err){
+    status.textContent = "Fehler beim Archivieren – bitte nochmal versuchen.";
+  } finally {
+    btn.disabled = false; btn.textContent = "Spiel archivieren & neuen Ticker starten";
+  }
+});
+
+// Tabs
+document.getElementById('tabLive').addEventListener('click', () => showTab('live'));
+document.getElementById('tabArchive').addEventListener('click', () => showTab('archive'));
+document.getElementById('archiveDetailBack').addEventListener('click', showArchiveList);
+
+function showTab(which){
+  const isLive = which === 'live';
+  document.getElementById('tabLive').classList.toggle('active', isLive);
+  document.getElementById('tabArchive').classList.toggle('active', !isLive);
+  document.getElementById('liveView').style.display = isLive ? 'block' : 'none';
+  document.getElementById('archiveView').style.display = isLive ? 'none' : 'block';
+  if(isLive){
+    if(!pollTimer) pollTimer = setInterval(() => refresh(true), 5000);
+  } else {
+    if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+    showArchiveList();
+  }
+}
+
+async function showArchiveList(){
+  document.getElementById('archiveDetailWrap').style.display = 'none';
+  document.getElementById('archiveListWrap').style.display = 'block';
+  document.getElementById('archiveDetailBack').style.display = 'none';
+
+  let list = [];
+  try{
+    const snap = await archiveListRef.get();
+    list = snap.exists ? (snap.data().items || []) : [];
+  }catch(e){}
+
+  const wrap = document.getElementById('archiveList');
+  const empty = document.getElementById('archiveEmpty');
+  if(!list.length){
+    wrap.innerHTML = "";
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  wrap.innerHTML = list.map(item => {
+    const isAway = item.venue === "away";
+    const name = isAway ? `${escapeHtml(item.opponent)} – SG Olympia III` : `SG Olympia III – ${escapeHtml(item.opponent)}`;
+    const score = isAway ? `${item.away} : ${item.home}` : `${item.home} : ${item.away}`;
+    return `
+    <div class="archive-item" data-id="${item.id}">
+      <div>
+        <div class="aname">${name}</div>
+        <div class="adate">${escapeHtml(item.dateLabel)}</div>
+      </div>
+      <div class="ascore">${score}</div>
+    </div>
+  `;
+  }).join("");
+
+  wrap.querySelectorAll('.archive-item').forEach(el => {
+    el.addEventListener('click', () => showArchiveDetail(el.dataset.id));
+  });
+}
+
+let currentArchiveId = null;
+
+async function showArchiveDetail(id){
+  let data = null;
+  try{
+    const snap = await archiveDocRef(id).get();
+    data = snap.exists ? snap.data() : null;
+  }catch(e){}
+  if(!data) return;
+
+  currentArchiveId = id;
+  document.getElementById('archiveListWrap').style.display = 'none';
+  document.getElementById('archiveDetailWrap').style.display = 'block';
+  document.getElementById('archiveDetailBack').style.display = 'inline-block';
+  document.getElementById('archiveDeleteZone').style.display = isReporter ? 'block' : 'none';
+  document.getElementById('deleteArchiveStatus').textContent = '';
+  document.getElementById('deleteArchiveBtn').textContent = 'Dieses Spiel löschen';
+
+  const m = data.match;
+  const isAway = m.venue === "away";
+  document.getElementById('archMatchupText').innerHTML = isAway
+    ? `${escapeHtml(m.opponent)} <span class="vs">–</span> SG Olympia III`
+    : `SG Olympia III <span class="vs">–</span> ${escapeHtml(m.opponent)}`;
+  document.getElementById('archScoreText').textContent = isAway ? `${m.away} : ${m.home}` : `${m.home} : ${m.away}`;
+  document.getElementById('archMetaText').textContent = `${m.meta || ""} · ${data.dateLabel}`;
+
+  const sorted = [...(data.events || [])].sort((a,b) => b.ts - a.ts);
+  const feed = document.getElementById('archFeed');
+  if(!sorted.length){
+    feed.innerHTML = `<div class="empty">Keine Einträge für dieses Spiel.</div>`;
+    return;
+  }
+  feed.innerHTML = sorted.map(e => `
+    <li class="entry ${e.type === 'goal' ? 'goal' : ''}">
+      <div class="tmark">${escapeHtml(e.minute)}'</div>
+      <div>
+        ${typeLabel(e.type) ? `<span class="tag">${typeLabel(e.type)}</span>` : ''}
+        <p>${escapeHtml(e.text)}</p>
+      </div>
+    </li>
+  `).join("");
+}
+
+// Delete an archived match (two-step inline confirm, no browser dialogs)
+let deleteArmed = false;
+let deleteArmTimer = null;
+
+document.getElementById('deleteArchiveBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('deleteArchiveBtn');
+  const status = document.getElementById('deleteArchiveStatus');
+  if(!currentArchiveId) return;
+
+  if(!deleteArmed){
+    deleteArmed = true;
+    btn.textContent = "Sicher? Nochmal klicken zum Löschen";
+    status.textContent = "";
+    clearTimeout(deleteArmTimer);
+    deleteArmTimer = setTimeout(() => {
+      deleteArmed = false;
+      btn.textContent = "Dieses Spiel löschen";
+    }, 4000);
+    return;
+  }
+
+  clearTimeout(deleteArmTimer);
+  deleteArmed = false;
+  btn.disabled = true; btn.textContent = "Lösche…";
+
+  try{
+    await archiveDocRef(currentArchiveId).delete();
+
+    const snap = await archiveListRef.get();
+    const list = snap.exists ? (snap.data().items || []) : [];
+    const updated = list.filter(item => item.id !== currentArchiveId);
+    await archiveListRef.set({ items: updated });
+
+    currentArchiveId = null;
+    showArchiveList();
+  } catch(err){
+    status.textContent = "Fehler beim Löschen – bitte nochmal versuchen.";
+  } finally {
+    btn.disabled = false; btn.textContent = "Dieses Spiel löschen";
+  }
+});
+
+// Init + poll
+(async function init(){
+  const m = await loadMatch();
+  document.getElementById('homeScore').value = m.home;
+  document.getElementById('awayScore').value = m.away;
+  document.getElementById('opponentDetailInput').value = m.opponent || "";
+  document.getElementById('venueSelect').value = m.venue || "home";
+  document.getElementById('matchDateInput').value = m.matchDate || "";
+  document.getElementById('kickoffInput').value = m.kickoff || "";
+  await refresh(false);
+  pollTimer = setInterval(() => refresh(true), 5000);
+})();
+</script>
+
+</body>
+</html>const

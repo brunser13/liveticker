@@ -187,7 +187,8 @@
     margin: 0 0 10px;
     color: var(--navy);
   }
-  .row{ display:flex; gap:8px; margin-bottom:9px; }
+  .row{ display:flex; gap:8px; margin-bottom:9px; flex-wrap:wrap; }
+  .row > *{ min-width: 0; }
   input[type=text], input[type=number], input[type=date], input[type=time], input[type=password], select, textarea{
     font-family:'IBM Plex Sans', sans-serif;
     font-size: 14px;
@@ -368,7 +369,12 @@
 
         <h2>Neuer Eintrag</h2>
         <div class="row">
+          <select id="timeKind" style="flex:none; width:104px;">
+            <option value="minute">Minute</option>
+            <option value="clock">Uhrzeit</option>
+          </select>
           <input type="text" class="min-input" id="entryMinute" placeholder="Min.">
+          <input type="time" id="entryClock" style="display:none;">
           <select id="entryType">
             <option value="event">Ereignis</option>
             <option value="goal">Tor</option>
@@ -535,6 +541,10 @@ function typeLabel(t){
   return { goal:"Tor", card:"Karte", sub:"Wechsel", event:"Ereignis", update:"" }[t] || "Ereignis";
 }
 
+function timeMark(e){
+  return e.kind === "clock" ? escapeHtml(e.minute) : `${escapeHtml(e.minute)}'`;
+}
+
 function renderEvents(list, animateNew){
   const feed = document.getElementById('feed');
   const empty = document.getElementById('emptyState');
@@ -547,7 +557,7 @@ function renderEvents(list, animateNew){
   const sorted = [...list].sort((a,b) => b.ts - a.ts);
   feed.innerHTML = sorted.map((e, i) => `
     <li class="entry ${e.type === 'goal' ? 'goal' : ''} ${animateNew && i === 0 ? 'new' : ''}">
-      <div class="tmark">${escapeHtml(e.minute)}'</div>
+      <div class="tmark">${timeMark(e)}</div>
       <div>
         ${typeLabel(e.type) ? `<span class="tag">${typeLabel(e.type)}</span>` : ''}
         <p>${escapeHtml(e.text)}</p>
@@ -592,9 +602,19 @@ auth.onAuthStateChanged((user) => {
   document.getElementById('pinInput').value = "";
 });
 
+// Toggle between "Minute" and "Uhrzeit" input for new entries
+document.getElementById('timeKind').addEventListener('change', (e) => {
+  const isClock = e.target.value === "clock";
+  document.getElementById('entryMinute').style.display = isClock ? "none" : "block";
+  document.getElementById('entryClock').style.display = isClock ? "block" : "none";
+});
+
 // Post entry
 document.getElementById('postBtn').addEventListener('click', async () => {
-  const minute = document.getElementById('entryMinute').value.trim() || "?";
+  const kind = document.getElementById('timeKind').value; // "minute" | "clock"
+  const minute = kind === "clock"
+    ? (document.getElementById('entryClock').value || "?")
+    : (document.getElementById('entryMinute').value.trim() || "?");
   const type = document.getElementById('entryType').value;
   const text = document.getElementById('entryText').value.trim();
   if(!text) return;
@@ -602,10 +622,11 @@ document.getElementById('postBtn').addEventListener('click', async () => {
   btn.disabled = true; btn.textContent = "Posten…";
   try{
     const events = await loadEvents();
-    events.push({ minute, type, text, ts: Date.now() });
+    events.push({ minute, kind, type, text, ts: Date.now() });
     await saveEvents(events);
     document.getElementById('entryText').value = "";
     document.getElementById('entryMinute').value = "";
+    document.getElementById('entryClock').value = "";
     await refresh(true);
   } finally {
     btn.disabled = false; btn.textContent = "Posten";
@@ -797,7 +818,7 @@ async function showArchiveDetail(id){
   }
   feed.innerHTML = sorted.map(e => `
     <li class="entry ${e.type === 'goal' ? 'goal' : ''}">
-      <div class="tmark">${escapeHtml(e.minute)}'</div>
+      <div class="tmark">${timeMark(e)}</div>
       <div>
         ${typeLabel(e.type) ? `<span class="tag">${typeLabel(e.type)}</span>` : ''}
         <p>${escapeHtml(e.text)}</p>

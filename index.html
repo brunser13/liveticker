@@ -259,6 +259,22 @@
     text-align:center; margin-top:16px; font-size:12px; color:#8a8072;
   }
 
+  .reporter-trigger-zone{
+    display:flex; justify-content:center; margin-top:20px;
+  }
+  .reporter-trigger{
+    display:inline-flex; align-items:center; justify-content:center;
+    width: 34px; height: 34px;
+    font-size: 20px;
+    color: #d8cfbc;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 50%;
+  }
+  .reporter-trigger:hover, .reporter-trigger:active{
+    color: #b8ab8f;
+  }
+
   /* Tabs */
   .tabs{
     display:flex; gap:6px; margin-bottom: 12px;
@@ -338,7 +354,7 @@
       <div class="empty" id="emptyState">Der Ticker startet, sobald der erste Eintrag kommt.</div>
     </div>
 
-    <div class="panel" id="reporterPanel">
+    <div class="panel" id="reporterPanel" style="display:none;">
       <div class="lock" id="lockView">
         <p>Nur fürs Team: Passwort eingeben, um Einträge zu posten.</p>
         <div class="lock-row">
@@ -412,6 +428,10 @@
         <button id="archiveBtn" style="background:var(--navy);">Spiel archivieren &amp; neuen Ticker starten</button>
         <p id="archiveStatus" style="font-size:12.5px; color:var(--green); margin:8px 0 0; text-align:center;"></p>
       </div>
+    </div>
+
+    <div class="reporter-trigger-zone">
+      <span class="reporter-trigger" id="reporterTrigger" aria-label="Team-Login" title="Team-Login">•</span>
     </div>
 
     <p class="share-hint">Diesen Link während des Spiels teilen – aktualisiert sich automatisch.</p>
@@ -601,6 +621,8 @@ document.getElementById('unlockBtn').addEventListener('click', async () => {
 });
 document.getElementById('lockBtn').addEventListener('click', async () => {
   await auth.signOut();
+  document.getElementById('reporterPanel').style.display = "none";
+  document.getElementById('reporterTrigger').style.display = "inline-flex";
 });
 
 // Auth-Status zentral steuern (reagiert auch nach Seiten-Reload, falls Login noch gültig ist)
@@ -611,6 +633,15 @@ auth.onAuthStateChanged((user) => {
   document.getElementById('pinInput').value = "";
   if(isReporter){
     document.getElementById('entryText').focus();
+  }
+});
+
+// Reporter panel bleibt für normale Besucher versteckt, bis der dezente Punkt angetippt wird
+document.getElementById('reporterTrigger').addEventListener('click', () => {
+  document.getElementById('reporterPanel').style.display = "block";
+  document.getElementById('reporterTrigger').style.display = "none";
+  if(!isReporter){
+    document.getElementById('pinInput').focus();
   }
 });
 
@@ -898,4 +929,5 @@ document.getElementById('deleteArchiveBtn').addEventListener('click', async () =
 
 </body>
 </html>
+
 

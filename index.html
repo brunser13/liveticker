@@ -191,31 +191,40 @@
   .row > *{ min-width: 0; }
   input[type=text], input[type=number], input[type=date], input[type=time], input[type=password], select, textarea{
     font-family:'IBM Plex Sans', sans-serif;
-    font-size: 14px;
+    font-size: 16px;
     border: 1px solid #d8cfbc;
     border-radius: 8px;
-    padding: 9px 10px;
+    padding: 12px 12px;
     background: var(--cream);
     color: var(--ink);
     width:100%;
+    min-height: 46px;
   }
-  textarea{ resize:vertical; min-height:54px; }
-  .row .min-input{ width: 78px; flex: none; }
+  textarea{ resize:vertical; min-height:64px; }
+  .row .min-input{ width: 84px; flex: none; }
   select{ flex:none; width: 130px; }
   button{
     font-family:'IBM Plex Sans', sans-serif;
     font-weight:600;
-    font-size: 14px;
+    font-size: 16px;
     border:none;
     border-radius: 8px;
-    padding: 10px 16px;
+    padding: 13px 16px;
     cursor:pointer;
     background: var(--claret);
     color: var(--cream);
     width:100%;
+    min-height: 46px;
   }
   button:hover{ background: var(--claret-deep); }
   button:disabled{ opacity:0.5; cursor:default; }
+
+  #postBtn{
+    position: sticky;
+    bottom: 12px;
+    z-index: 5;
+    box-shadow: 0 4px 14px rgba(36,29,21,0.22);
+  }
 
   .lock{
     text-align:center; padding: 10px 4px 2px;
@@ -243,7 +252,7 @@
   .unlocked-tag button:hover{ background: var(--cream); color: var(--ink); }
 
   .score-edit{ display:flex; gap:8px; align-items:center; margin-bottom:12px; }
-  .score-edit input{ width: 54px; text-align:center; }
+  .score-edit input{ width: 64px; padding: 12px 6px; text-align:center; }
   .score-edit span{ font-family:'Bebas Neue',sans-serif; font-size:18px; color:var(--navy); }
 
   .share-hint{
@@ -600,6 +609,9 @@ auth.onAuthStateChanged((user) => {
   document.getElementById('lockView').style.display = isReporter ? "none" : "block";
   document.getElementById('editView').style.display = isReporter ? "block" : "none";
   document.getElementById('pinInput').value = "";
+  if(isReporter){
+    document.getElementById('entryText').focus();
+  }
 });
 
 // Toggle between "Minute" and "Uhrzeit" input for new entries
@@ -628,6 +640,7 @@ document.getElementById('postBtn').addEventListener('click', async () => {
     document.getElementById('entryMinute').value = "";
     document.getElementById('entryClock').value = "";
     await refresh(true);
+    document.getElementById('entryText').focus();
   } finally {
     btn.disabled = false; btn.textContent = "Posten";
   }
@@ -885,3 +898,4 @@ document.getElementById('deleteArchiveBtn').addEventListener('click', async () =
 
 </body>
 </html>
+
